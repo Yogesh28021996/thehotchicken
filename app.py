@@ -1,16 +1,30 @@
 import streamlit as st
 from datetime import datetime
 import random
+import requests
 import pandas as pd
 
-# ======================================
-# ✅ PUBLIC GOOGLE SHEET CSV URL
-# ======================================
-SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR-uzwsqbnhmyb8IwSydFkFlEkZj0gpdBXsn_ZyMoxiJTePIvYGEU60PPqJQte_o8HjVpX3jPBAn1PE/pub?output=csv"
+# ================================
+# ✅ CONFIG
+# ================================
+# 📌 Public Google Sheet CSV export link
+CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR-uzwsqbnhmyb8IwSydFkFlEkZj0gpdBXsn_ZyMoxiJTePIvYGEU60PPqJQte_o8HjVpX3jPBAn1PE/pub?output=csv"
 
-# ======================================
-# ✅ MENU ITEMS
-# ======================================
+# 📌 Google Form POST link
+GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/your_form_id/formResponse"  # <-- Replace with your Form POST URL
+
+# 📌 Form fields (find them with Inspect Element!)
+FORM_FIELDS = {
+    "order_id": "entry.xxxxxxxx",
+    "datetime": "entry.xxxxxxxx",
+    "items": "entry.xxxxxxxx",
+    "total": "entry.xxxxxxxx",
+    "payment": "entry.xxxxxxxx",
+}
+
+# ================================
+# ✅ MENU
+# ================================
 MENU = {
     "Fried chicken wings (3pc/5pc)": [80, 130],
     "Fried chicken lollipop (2pc/5pc)": [100, 180],
@@ -61,10 +75,10 @@ MENU = {
     "Garlic Tease": 150,
 }
 
-# ======================================
-# ✅ STREAMLIT UI
-# ======================================
-st.title("🔥 The Hot Chick - Order Now (Public Sheet Version)")
+# ================================
+# ✅ UI
+# ================================
+st.title("🔥 The Hot Chick — Order Now!")
 
 if "cart" not in st.session_state:
     st.session_state.cart = []
@@ -96,40 +110,39 @@ if st.button("Add Item"):
     })
     st.success(f"✅ Added {qty} x {item} {portion_note}")
 
+# Cart
 if st.session_state.cart:
-    st.write("## 🛒 Current Order")
+    st.write("## 🛒 Current Order Summary")
     total_order_amount = sum(i["item_total"] for i in st.session_state.cart)
     for idx, i in enumerate(st.session_state.cart, 1):
         st.write(f"{idx}. {i['qty']} x {i['item']} {i['portion_note']} = ₹{i['item_total']}")
-    st.write(f"### 💵 Total: ₹{total_order_amount}")
+    st.write(f"### 💵 Current Total: ₹{total_order_amount}")
 
 payment_method = st.selectbox("Payment Method", ["Cash", "UPI"])
 
-if st.button("Create Order"):
+if st.button("Place Order"):
     if not st.session_state.cart:
         st.warning("⚠️ Add at least one item!")
     else:
-        total_order_amount = sum(i["item_total"] for i in st.session_state.cart)
         now = datetime.now()
         order_id = f"HC-{now.strftime('%Y%m%d%H%M%S')}-{random.randint(1000, 9999)}"
         order_datetime = now.strftime("%Y-%m-%d %H:%M:%S")
         items_summary = "; ".join([f"{i['qty']} x {i['item']} {i['portion_note']}" for i in st.session_state.cart])
+        total_amount = sum(i["item_total"] for i in st.session_state.cart)
 
-        # ⚠️ You cannot append to a public sheet directly — so we simulate by showing details
-        st.write("✅ **Simulated: Order would be saved here**")
-        st.write(f"**Order ID:** `{order_id}`")
-        st.write(f"**Date & Time:** {order_datetime}")
-        st.write(f"**Items:** {items_summary}")
-        st.write(f"**Total:** ₹{total_order_amount}")
-        st.write(f"**Payment Method:** {payment_method}")
+        payload = {
+            FORM_FIELDS["order_id"]: order_id,
+            FORM_FIELDS["datetime"]: order_datetime,
+            FORM_FIELDS["items"]: items_summary,
+            FORM_FIELDS["total"]: total_amount,
+            FORM_FIELDS["payment"]: payment_method,
+        }
 
+        response = requests.post(GOOGLE_FORM_URL, data=payload)
+        st.success(f"🎉 Order submitted! **Order ID:** `{order_id}`")
         st.session_state.cart = []
 
-# View existing orders
-st.write("## 📄 Existing Orders (Read Only)")
-
-try:
-    df = pd.read_csv(SHEET_CSV_URL)
-    st.dataframe(df)
-except Exception as e:
-    st.error(f"❌ Could not read public sheet: {e}")
+# Show live sheet
+st.write("## 📄 All Orders")
+df = pd.read_csv(CSV_URL)
+st.dataframe(df)
