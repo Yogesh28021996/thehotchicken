@@ -3,30 +3,32 @@ from datetime import datetime
 import random
 import gspread
 from google.oauth2.service_account import Credentials
-import json
 
-# ===============================
-# ✅ GOOGLE SHEETS CONNECTION
-# ===============================
-# Load secrets
-service_account_info = json.loads(st.secrets["GOOGLE_SERVICE_ACCOUNT"])
+# ======================================
+# ✅ LOAD GOOGLE SERVICE ACCOUNT SECRETS
+# ======================================
+creds_dict = {
+    "type": st.secrets["GOOGLE_SERVICE_ACCOUNT"]["type"],
+    "project_id": st.secrets["GOOGLE_SERVICE_ACCOUNT"]["project_id"],
+    "private_key_id": st.secrets["GOOGLE_SERVICE_ACCOUNT"]["private_key_id"],
+    "private_key": st.secrets["GOOGLE_SERVICE_ACCOUNT"]["private_key"].replace("\\n", "\n"),
+    "client_email": st.secrets["GOOGLE_SERVICE_ACCOUNT"]["client_email"],
+    "client_id": st.secrets["GOOGLE_SERVICE_ACCOUNT"]["client_id"],
+    "auth_uri": st.secrets["GOOGLE_SERVICE_ACCOUNT"]["auth_uri"],
+    "token_uri": st.secrets["GOOGLE_SERVICE_ACCOUNT"]["token_uri"],
+    "auth_provider_x509_cert_url": st.secrets["GOOGLE_SERVICE_ACCOUNT"]["auth_provider_x509_cert_url"],
+    "client_x509_cert_url": st.secrets["GOOGLE_SERVICE_ACCOUNT"]["client_x509_cert_url"]
+}
 
-scope = [
-    "https://spreadsheets.google.com/feeds",
-    "https://www.googleapis.com/auth/drive",
-    "https://www.googleapis.com/auth/spreadsheets"
-]
-
-# Authorize
-creds = Credentials.from_service_account_info(service_account_info, scopes=scope)
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
 client = gspread.authorize(creds)
 
-# Open Google Sheet (must exist!)
 sheet = client.open("orders").sheet1
 
-# ===============================
-# ✅ MENU
-# ===============================
+# ======================================
+# ✅ MENU ITEMS
+# ======================================
 MENU = {
     "Fried chicken wings (3pc/5pc)": [80, 130],
     "Fried chicken lollipop (2pc/5pc)": [100, 180],
@@ -77,25 +79,21 @@ MENU = {
     "Garlic Tease": 150,
 }
 
-# ===============================
+# ======================================
 # ✅ STREAMLIT UI
-# ===============================
+# ======================================
 st.title("🔥 The Hot Chick - Order Now")
 
+# Session state cart
 if "cart" not in st.session_state:
     st.session_state.cart = []
 
-# Item select
+# Select item
 item = st.selectbox("Select Item", list(MENU.keys()))
-
 price = MENU[item]
 
-# Portion check
 if isinstance(price, list):
-    portion = st.radio(
-        "Select Portion",
-        [f"Option {i+1}: ₹{p}" for i, p in enumerate(price)]
-    )
+    portion = st.radio("Select Portion", [f"Option {i+1}: ₹{p}" for i, p in enumerate(price)])
     portion_index = int(portion.split()[1].replace(":", "")) - 1
     unit_price = price[portion_index]
     portion_note = f"(Portion {portion_index+1})"
@@ -106,9 +104,8 @@ else:
 qty = st.selectbox("Quantity", list(range(1, 11)))
 item_total = qty * unit_price
 
-st.write(f"### Item Total: ₹{item_total}")
+st.write(f"### 🧾 Item Total: ₹{item_total}")
 
-# Add Item
 if st.button("Add Item"):
     st.session_state.cart.append({
         "item": item,
@@ -119,29 +116,29 @@ if st.button("Add Item"):
     })
     st.success(f"✅ Added {qty} x {item} {portion_note}")
 
-# Cart
+# Cart summary
 if st.session_state.cart:
     st.write("## 🛒 Current Order Summary")
-    total_order_amount = sum(i['item_total'] for i in st.session_state.cart)
+    total_order_amount = sum(i["item_total"] for i in st.session_state.cart)
     for idx, i in enumerate(st.session_state.cart, 1):
         st.write(f"{idx}. {i['qty']} x {i['item']} {i['portion_note']} = ₹{i['item_total']}")
-    st.write(f"### 🔢 Current Total: ₹{total_order_amount}")
+    st.write(f"### 💵 Current Total: ₹{total_order_amount}")
 
-payment_method = st.selectbox("Select Payment Method", ["Cash", "UPI"])
+# Payment
+payment_method = st.selectbox("Payment Method", ["Cash", "UPI"])
 
-# Create Order
+# Final order
 if st.button("Create Order"):
     if not st.session_state.cart:
-        st.warning("⚠️ Add at least one item first.")
+        st.warning("⚠️ Add at least one item!")
     else:
-        total_order_amount = sum(i['item_total'] for i in st.session_state.cart)
+        total_order_amount = sum(i["item_total"] for i in st.session_state.cart)
         now = datetime.now()
-        order_id = f"HC-{now.strftime('%Y%m%d%H%M%S')}-{random.randint(1000,9999)}"
+        order_id = f"HC-{now.strftime('%Y%m%d%H%M%S')}-{random.randint(1000, 9999)}"
         order_datetime = now.strftime("%Y-%m-%d %H:%M:%S")
-        items_summary = "; ".join([
-            f"{i['qty']} x {i['item']} {i['portion_note']}" for i in st.session_state.cart
-        ])
+        items_summary = "; ".join([f"{i['qty']} x {i['item']} {i['portion_note']}" for i in st.session_state.cart])
 
+        # Append to Google Sheet
         sheet.append_row([
             order_id,
             order_datetime,
@@ -150,12 +147,12 @@ if st.button("Create Order"):
             payment_method
         ])
 
-        st.success(f"🎉 Order Created! Order ID: `{order_id}`")
+        st.success(f"🎉 Order Created! **Order ID:** `{order_id}`")
         st.write(f"**Date & Time:** {order_datetime}")
         st.write("## ✅ Final Order Details")
         for idx, i in enumerate(st.session_state.cart, 1):
             st.write(f"{idx}. {i['qty']} x {i['item']} {i['portion_note']} = ₹{i['item_total']}")
-        st.write(f"### 🧾 Total Order Amount: ₹{total_order_amount}")
-        st.write(f"**Payment Method:** {payment_method}")
+        st.write(f"### 💵 Total Order: ₹{total_order_amount}")
+        st.write(f"**Payment:** {payment_method}")
 
         st.session_state.cart = []
