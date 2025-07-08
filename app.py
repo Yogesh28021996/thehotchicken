@@ -1,30 +1,33 @@
 import streamlit as st
 from datetime import datetime
 import random
-import requests
-import pandas as pd
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
-# ================================
-# ✅ CONFIG
-# ================================
-# 📌 Public Google Sheet CSV export link
-CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR-uzwsqbnhmyb8IwSydFkFlEkZj0gpdBXsn_ZyMoxiJTePIvYGEU60PPqJQte_o8HjVpX3jPBAn1PE/pub?output=csv"
+# ===============================
+# GOOGLE SHEETS SETUP
+# ===============================
 
-# 📌 Google Form POST link — replace with your actual Form POST link
-GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/REPLACE_WITH_YOUR_FORM_ID/formResponse"
+# Scope for Sheets + Drive
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive"
+]
 
-# 📌 Form field entry IDs — replace with your actual IDs from Inspect Element
-FORM_FIELDS = {
-    "order_id": "entry.YOUR_ID_1",
-    "datetime": "entry.YOUR_ID_2",
-    "items": "entry.YOUR_ID_3",
-    "total": "entry.YOUR_ID_4",
-    "payment": "entry.YOUR_ID_5",
-}
+# Load your Service Account JSON
+creds = ServiceAccountCredentials.from_json_keyfile_name(
+    "service_account.json",
+    scope
+)
+client = gspread.authorize(creds)
 
-# ================================
-# ✅ MENU
-# ================================
+# Open your Google Sheet by name
+sheet = client.open("orders").sheet1
+
+# ===============================
+# FULL MENU
+# ===============================
+
 MENU = {
     "Fried chicken wings (3pc/5pc)": [80, 130],
     "Fried chicken lollipop (2pc/5pc)": [100, 180],
@@ -75,21 +78,27 @@ MENU = {
     "Garlic Tease": 150,
 }
 
-# ================================
-# ✅ UI
-# ================================
-st.title("🔥 The Hot Chick — Order Now!")
+# ===============================
+# STREAMLIT UI
+# ===============================
 
-# Cart state
-if "cart" not in st.session_state:
+st.title("🔥 The Hot Chick - Order Now")
+
+# Cart
+if 'cart' not in st.session_state:
     st.session_state.cart = []
 
 # Select item
 item = st.selectbox("Select Item", list(MENU.keys()))
+
 price = MENU[item]
 
+# Portion logic
 if isinstance(price, list):
-    portion = st.radio("Select Portion", [f"Option {i+1}: ₹{p}" for i, p in enumerate(price)])
+    portion = st.radio(
+        "Select Portion",
+        [f"Option {i+1}: ₹{p}" for i, p in enumerate(price)]
+    )
     portion_index = int(portion.split()[1].replace(":", "")) - 1
     unit_price = price[portion_index]
     portion_note = f"(Portion {portion_index+1})"
@@ -100,8 +109,9 @@ else:
 qty = st.selectbox("Quantity", list(range(1, 11)))
 item_total = qty * unit_price
 
-st.write(f"### 🧾 Item Total: ₹{item_total}")
+st.write(f"### Item Total: ₹{item_total}")
 
+# Add item
 if st.button("Add Item"):
     st.session_state.cart.append({
         "item": item,
@@ -112,43 +122,51 @@ if st.button("Add Item"):
     })
     st.success(f"✅ Added {qty} x {item} {portion_note}")
 
-# Cart
+# Cart summary
 if st.session_state.cart:
     st.write("## 🛒 Current Order Summary")
-    total_order_amount = sum(i["item_total"] for i in st.session_state.cart)
+    total_order_amount = sum(i['item_total'] for i in st.session_state.cart)
     for idx, i in enumerate(st.session_state.cart, 1):
-        st.write(f"{idx}. {i['qty']} x {i['item']} {i['portion_note']} = ₹{i['item_total']}")
-    st.write(f"### 💵 Current Total: ₹{total_order_amount}")
+        st.write(
+            f"{idx}. {i['qty']} x {i['item']} {i['portion_note']} = ₹{i['item_total']}"
+        )
+    st.write(f"### 🔢 Current Total: ₹{total_order_amount}")
 
-payment_method = st.selectbox("Payment Method", ["Cash", "UPI"])
+# Payment
+payment_method = st.selectbox("Select Payment Method", ["Cash", "UPI"])
 
-if st.button("Place Order"):
+# Create order
+if st.button("Create Order"):
     if not st.session_state.cart:
-        st.warning("⚠️ Add at least one item!")
+        st.warning("⚠️ Add at least one item.")
     else:
+        total_order_amount = sum(i['item_total'] for i in st.session_state.cart)
         now = datetime.now()
-        order_id = f"HC-{now.strftime('%Y%m%d%H%M%S')}-{random.randint(1000, 9999)}"
+        order_id = f"HC-{now.strftime('%Y%m%d%H%M%S')}-{random.randint(1000,9999)}"
         order_datetime = now.strftime("%Y-%m-%d %H:%M:%S")
-        items_summary = "; ".join([f"{i['qty']} x {i['item']} {i['portion_note']}" for i in st.session_state.cart])
-        total_amount = sum(i["item_total"] for i in st.session_state.cart)
+        items_summary = "; ".join([
+            f"{i['qty']} x {i['item']} {i['portion_note']}" for i in st.session_state.cart
+        ])
 
-        payload = {
-            FORM_FIELDS["order_id"]: order_id,
-            FORM_FIELDS["datetime"]: order_datetime,
-            FORM_FIELDS["items"]: items_summary,
-            FORM_FIELDS["total"]: total_amount,
-            FORM_FIELDS["payment"]: payment_method,
-        }
+        # Save to Google Sheets
+        sheet.append_row([
+            order_id,
+            order_datetime,
+            items_summary,
+            total_order_amount,
+            payment_method
+        ])
 
-        response = requests.post(GOOGLE_FORM_URL, data=payload)
+        st.success(f"🎉 Order Created! Order ID: `{order_id}`")
+        st.write(f"**Date & Time:** {order_datetime}")
+        st.write("## ✅ Final Order Details")
+        for idx, i in enumerate(st.session_state.cart, 1):
+            st.write(
+                f"{idx}. {i['qty']} x {i['item']} {i['portion_note']} = ₹{i['item_total']}"
+            )
+        st.write(f"### 🧾 Total Order Amount: ₹{total_order_amount}")
+        st.write(f"**Payment Method:** {payment_method}")
 
-        if response.status_code == 200 or response.status_code == 302:
-            st.success(f"🎉 Order submitted! **Order ID:** `{order_id}`")
-            st.session_state.cart = []
-        else:
-            st.error("❌ Failed to submit order. Please check Form URL and entries.")
-
-# Show all orders
-st.write("## 📄 All Orders")
-df = pd.read_csv(CSV_URL)
-st.dataframe(df)
+        # Clear cart
+        st.session_state.cart = []
+ 
