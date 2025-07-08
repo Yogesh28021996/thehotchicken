@@ -1,30 +1,12 @@
 import streamlit as st
 from datetime import datetime
 import random
-import gspread
-from google.oauth2.service_account import Credentials
+import pandas as pd
 
 # ======================================
-# ✅ LOAD GOOGLE SERVICE ACCOUNT SECRETS
+# ✅ PUBLIC GOOGLE SHEET CSV URL
 # ======================================
-creds_dict = {
-    "type": st.secrets["GOOGLE_SERVICE_ACCOUNT"]["type"],
-    "project_id": st.secrets["GOOGLE_SERVICE_ACCOUNT"]["project_id"],
-    "private_key_id": st.secrets["GOOGLE_SERVICE_ACCOUNT"]["private_key_id"],
-    "private_key": st.secrets["GOOGLE_SERVICE_ACCOUNT"]["private_key"].replace("\\n", "\n"),
-    "client_email": st.secrets["GOOGLE_SERVICE_ACCOUNT"]["client_email"],
-    "client_id": st.secrets["GOOGLE_SERVICE_ACCOUNT"]["client_id"],
-    "auth_uri": st.secrets["GOOGLE_SERVICE_ACCOUNT"]["auth_uri"],
-    "token_uri": st.secrets["GOOGLE_SERVICE_ACCOUNT"]["token_uri"],
-    "auth_provider_x509_cert_url": st.secrets["GOOGLE_SERVICE_ACCOUNT"]["auth_provider_x509_cert_url"],
-    "client_x509_cert_url": st.secrets["GOOGLE_SERVICE_ACCOUNT"]["client_x509_cert_url"]
-}
-
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-client = gspread.authorize(creds)
-
-sheet = client.open("orders").sheet1
+SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR-uzwsqbnhmyb8IwSydFkFlEkZj0gpdBXsn_ZyMoxiJTePIvYGEU60PPqJQte_o8HjVpX3jPBAn1PE/pub?output=csv"
 
 # ======================================
 # ✅ MENU ITEMS
@@ -82,13 +64,11 @@ MENU = {
 # ======================================
 # ✅ STREAMLIT UI
 # ======================================
-st.title("🔥 The Hot Chick - Order Now")
+st.title("🔥 The Hot Chick - Order Now (Public Sheet Version)")
 
-# Session state cart
 if "cart" not in st.session_state:
     st.session_state.cart = []
 
-# Select item
 item = st.selectbox("Select Item", list(MENU.keys()))
 price = MENU[item]
 
@@ -116,18 +96,15 @@ if st.button("Add Item"):
     })
     st.success(f"✅ Added {qty} x {item} {portion_note}")
 
-# Cart summary
 if st.session_state.cart:
-    st.write("## 🛒 Current Order Summary")
+    st.write("## 🛒 Current Order")
     total_order_amount = sum(i["item_total"] for i in st.session_state.cart)
     for idx, i in enumerate(st.session_state.cart, 1):
         st.write(f"{idx}. {i['qty']} x {i['item']} {i['portion_note']} = ₹{i['item_total']}")
-    st.write(f"### 💵 Current Total: ₹{total_order_amount}")
+    st.write(f"### 💵 Total: ₹{total_order_amount}")
 
-# Payment
 payment_method = st.selectbox("Payment Method", ["Cash", "UPI"])
 
-# Final order
 if st.button("Create Order"):
     if not st.session_state.cart:
         st.warning("⚠️ Add at least one item!")
@@ -138,21 +115,21 @@ if st.button("Create Order"):
         order_datetime = now.strftime("%Y-%m-%d %H:%M:%S")
         items_summary = "; ".join([f"{i['qty']} x {i['item']} {i['portion_note']}" for i in st.session_state.cart])
 
-        # Append to Google Sheet
-        sheet.append_row([
-            order_id,
-            order_datetime,
-            items_summary,
-            total_order_amount,
-            payment_method
-        ])
-
-        st.success(f"🎉 Order Created! **Order ID:** `{order_id}`")
+        # ⚠️ You cannot append to a public sheet directly — so we simulate by showing details
+        st.write("✅ **Simulated: Order would be saved here**")
+        st.write(f"**Order ID:** `{order_id}`")
         st.write(f"**Date & Time:** {order_datetime}")
-        st.write("## ✅ Final Order Details")
-        for idx, i in enumerate(st.session_state.cart, 1):
-            st.write(f"{idx}. {i['qty']} x {i['item']} {i['portion_note']} = ₹{i['item_total']}")
-        st.write(f"### 💵 Total Order: ₹{total_order_amount}")
-        st.write(f"**Payment:** {payment_method}")
+        st.write(f"**Items:** {items_summary}")
+        st.write(f"**Total:** ₹{total_order_amount}")
+        st.write(f"**Payment Method:** {payment_method}")
 
         st.session_state.cart = []
+
+# View existing orders
+st.write("## 📄 Existing Orders (Read Only)")
+
+try:
+    df = pd.read_csv(SHEET_CSV_URL)
+    st.dataframe(df)
+except Exception as e:
+    st.error(f"❌ Could not read public sheet: {e}")
