@@ -10,16 +10,16 @@ import pandas as pd
 # 📌 Public Google Sheet CSV export link
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR-uzwsqbnhmyb8IwSydFkFlEkZj0gpdBXsn_ZyMoxiJTePIvYGEU60PPqJQte_o8HjVpX3jPBAn1PE/pub?output=csv"
 
-# 📌 Google Form POST link
-GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/your_form_id/formResponse"  # <-- Replace with your Form POST URL
+# 📌 Google Form POST link — replace with your actual Form POST link
+GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/REPLACE_WITH_YOUR_FORM_ID/formResponse"
 
-# 📌 Form fields (find them with Inspect Element!)
+# 📌 Form field entry IDs — replace with your actual IDs from Inspect Element
 FORM_FIELDS = {
-    "order_id": "entry.xxxxxxxx",
-    "datetime": "entry.xxxxxxxx",
-    "items": "entry.xxxxxxxx",
-    "total": "entry.xxxxxxxx",
-    "payment": "entry.xxxxxxxx",
+    "order_id": "entry.YOUR_ID_1",
+    "datetime": "entry.YOUR_ID_2",
+    "items": "entry.YOUR_ID_3",
+    "total": "entry.YOUR_ID_4",
+    "payment": "entry.YOUR_ID_5",
 }
 
 # ================================
@@ -80,9 +80,11 @@ MENU = {
 # ================================
 st.title("🔥 The Hot Chick — Order Now!")
 
+# Cart state
 if "cart" not in st.session_state:
     st.session_state.cart = []
 
+# Select item
 item = st.selectbox("Select Item", list(MENU.keys()))
 price = MENU[item]
 
@@ -139,10 +141,14 @@ if st.button("Place Order"):
         }
 
         response = requests.post(GOOGLE_FORM_URL, data=payload)
-        st.success(f"🎉 Order submitted! **Order ID:** `{order_id}`")
-        st.session_state.cart = []
 
-# Show live sheet
+        if response.status_code == 200 or response.status_code == 302:
+            st.success(f"🎉 Order submitted! **Order ID:** `{order_id}`")
+            st.session_state.cart = []
+        else:
+            st.error("❌ Failed to submit order. Please check Form URL and entries.")
+
+# Show all orders
 st.write("## 📄 All Orders")
 df = pd.read_csv(CSV_URL)
 st.dataframe(df)
